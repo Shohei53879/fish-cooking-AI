@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>魚さばきナビ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* レイアウト: 一画面アプリ。上は読む場所(手順カード)、下は濡れた手でも押せる大きな操作帯。 */
+:root {
+  --bg: #e9eef1;          /* 流し台まわりの白タイル */
+  --surface: #ffffff;
+  --ink: #13232d;         /* 藍墨 */
+  --muted: #566873;
+  --line: #cbd5db;
+  --accent: #0f5c7a;      /* 藍 */
+  --accent-ink: #ffffff;
+  --shu: #c23a24;         /* 朱。撮影ボタンだけに使う */
+  --shu-ink: #ffffff;
+  --warn-bg: #fbeed3;
+  --warn-ink: #6f4500;
+  --tip-bg: #e3eff4;
+  --font-display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d181e;
+    --surface: #17262f;
+    --ink: #e8eff2;
+    --muted: #9db1bc;
+    --line: #2c404b;
+    --accent: #62b9d9;
+    --accent-ink: #06202b;
+    --shu: #f0694e;
+    --shu-ink: #2a0a03;
+    --warn-bg: #3a2c10;
+    --warn-ink: #f3cf8a;
+    --tip-bg: #1d3340;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d181e;
+  --surface: #17262f;
+  --ink: #e8eff2;
+  --muted: #9db1bc;
+  --line: #2c404b;
+  --accent: #62b9d9;
+  --accent-ink: #06202b;
+  --shu: #f0694e;
+  --shu-ink: #2a0a03;
+  --warn-bg: #3a2c10;
+  --warn-ink: #f3cf8a;
+  --tip-bg: #1d3340;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: flex; flex-direction: column; max-width: 560px; margin: 0 auto; }
+
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line);
+}
+.brand { font-family: var(--font-display); font-weight: 800; font-size: 1.25rem; letter-spacing: .04em; margin: 0; }
+.voice-toggle {
+  border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px;
+  padding: 6px 14px; min-height: 40px; font-size: .9rem; font-weight: 700; white-space: nowrap;
+}
+.voice-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+
+/* ---------- 共通ボタン ---------- */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 60px; padding: 10px 14px; border-radius: 14px;
+  border: 1.5px solid var(--line); background: var(--surface);
+  font-weight: 700; font-size: 1.05rem; line-height: 1.3; text-align: center;
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn-cam { background: var(--shu); color: var(--shu-ink); border-color: var(--shu); min-height: 68px; font-size: 1.2rem; width: 100%; }
+.btn-plain { min-height: 44px; font-size: .92rem; padding: 6px 12px; border-radius: 10px; }
+.cam-icon { width: 26px; height: 26px; flex: none; }
+
+/* ---------- ホーム ---------- */
+.lead { margin: 0; font-size: 1.05rem; }
+.note { margin: 0; color: var(--muted); font-size: .88rem; }
+.h2 { margin: 0; font-size: .85rem; font-weight: 700; color: var(--muted); letter-spacing: .08em; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.id-row { display: flex; gap: 12px; align-items: flex-start; }
+.thumb { width: 84px; height: 84px; object-fit: cover; border-radius: 10px; flex: none; background: var(--bg); max-width: 100%; }
+.id-name { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.5rem; line-height: 1.3; text-wrap: balance; }
+.id-why { margin: 0; font-size: .92rem; color: var(--muted); }
+.notes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.notes li { background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; padding: 8px 12px; font-size: .95rem; line-height: 1.5; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > .btn { flex: 1 1 140px; }
+
+.guide-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.guide-item {
+  width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; min-height: 64px;
+}
+.guide-item b { font-size: 1.1rem; }
+.guide-item span { color: var(--muted); font-size: .88rem; grid-column: 1; line-height: 1.4; }
+.guide-item em { grid-column: 2; grid-row: 1 / span 2; font-style: normal; font-size: .85rem; color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- ガイド ---------- */
+.ctx { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ctx-name { margin: 0; font-weight: 700; font-size: .98rem; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
+.ctx-name small { display: block; font-weight: 500; color: var(--muted); font-size: .8rem; }
+
+.bars { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.bars li { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.bars li.on { background: var(--accent); }
+
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.step-head { display: flex; align-items: baseline; gap: 12px; }
+.step-no { font-family: var(--font-display); font-weight: 800; font-size: 3rem; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.step-total { color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.step-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.65rem; line-height: 1.35; text-wrap: balance; }
+.step-say { margin: 0; font-size: 1.25rem; line-height: 1.75; }
+.callout { margin: 0; border-radius: 12px; padding: 10px 14px; font-size: 1rem; line-height: 1.6; }
+.callout b { display: block; font-size: .78rem; letter-spacing: .1em; }
+.callout.tip { background: var(--tip-bg); }
+.callout.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.ai-made { margin: 0; font-size: .8rem; color: var(--muted); }
+
+.ai { border: 1.5px solid var(--accent); border-radius: 16px; padding: 14px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+.ai-label { margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .1em; color: var(--accent); }
+.ai-body { display: flex; gap: 12px; align-items: flex-start; }
+.ai-text { margin: 0; font-size: 1.12rem; line-height: 1.7; min-width: 0; overflow-wrap: anywhere; }
+.ai-text.busy { color: var(--muted); }
+
+.ask { display: flex; flex-direction: column; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1.5px solid var(--line); background: var(--surface); border-radius: 999px; padding: 8px 14px; min-height: 44px; font-size: .95rem; font-weight: 500; }
+.ask-row { display: flex; gap: 8px; }
+.ask-row input {
+  flex: 1; min-width: 0; min-height: 48px; border-radius: 12px; border: 1.5px solid var(--line);
+  background: var(--surface); padding: 8px 12px; font-size: 16px;
+}
+.ask-row .btn { min-height: 48px; padding: 6px 16px; font-size: .95rem; border-radius: 12px; flex: none; }
+
+.done-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.7rem; }
+.done ul { margin: 0; padding-left: 1.2em; }
+
+/* ---------- 下の操作帯 ---------- */
+.dock { border-top: 1px solid var(--line); background: var(--bg); padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.dock-row { display: grid; grid-template-columns: 1fr 1.2fr 1.6fr; gap: 10px; }
+.dock-row .btn { min-height: 64px; padding: 6px; }
+
+.sr-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+
+@media (max-width: 360px) {
+  .step-say { font-size: 1.15rem; }
+  .dock-row .btn { font-size: .95rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ai-text.busy::after { content: ""; display: inline-block; width: .5em; height: .5em; margin-left: .4em; border-radius: 50%; background: var(--accent); animation: blink 1s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+}
+
+/* ---------- Web版で追加 ---------- */
+:root { --ok: #1f8a4c; --cam-bg: #0b1419; --cam-ink: #e8eff2; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ok: #4cc47f; } }
+:root[data-theme="dark"] { --ok: #4cc47f; }
+
+.cam { position: relative; flex: none; width: 100%; aspect-ratio: 16 / 9; max-height: 28vh; background: var(--cam-bg); overflow: hidden; }
+.app[data-view="guide"] .cam { max-height: 23vh; }
+.cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam-off { position: absolute; inset: 0; background: var(--cam-bg); color: var(--cam-ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; text-align: center; }
+.cam-off .btn-cam { width: auto; min-height: 56px; padding: 8px 22px; font-size: 1.05rem; }
+.cam-off p { margin: 0; font-size: .82rem; line-height: 1.5; color: #b9c8d0; }
+.cam-chips { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.chip-s { background: rgba(11, 20, 25, .72); color: #fff; border-radius: 999px; padding: 2px 10px; font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cam-action { position: absolute; right: 10px; bottom: 10px; min-height: 48px; padding: 6px 18px; border-radius: 999px; border: 0; background: var(--shu); color: var(--shu-ink); font-weight: 700; font-size: 1rem; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
+
+.status { flex: none; width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 16px; background: var(--surface); border: 0; border-bottom: 1px solid var(--line); text-align: left; font-size: .9rem; font-weight: 700; line-height: 1.4; }
+.status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.status[data-mode="listen"] .dot { background: var(--ok); }
+.status[data-mode="speak"] .dot, .status[data-mode="think"] .dot { background: var(--accent); }
+.status[data-mode="blocked"] .dot { background: var(--shu); }
+.status[data-mode="blocked"] { color: var(--shu); }
+.status .heard { font-weight: 500; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+
+.words { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: .95rem; }
+.words dt { font-weight: 700; }
+.words dd { margin: 0; color: var(--muted); }
+
+.sheet { position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.sheet-in { max-width: 560px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.4rem; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-weight: 700; font-size: .95rem; }
+.field input, .field select { width: 100%; min-height: 48px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 12px; font: inherit; font-size: 16px; }
+.field .note a { color: var(--accent); }
+.test-out { margin: 0; font-size: .92rem; min-height: 1.6em; overflow-wrap: anywhere; }
+details.adv summary { font-weight: 700; font-size: .95rem; min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+details.adv .field { margin-top: 10px; }
+
+.dock { padding: 10px 16px 12px; }
+@media (prefers-reduced-motion: no-preference) {
+  .status[data-mode="think"] .dot { animation: blink 1s ease-in-out infinite; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-view="home">
+  <header class="top">
+    <p class="brand">魚さばきナビ</p>
+    <button type="button" class="voice-toggle" id="settingsBtn">設定</button>
+  </header>
+
+  <section class="cam" id="cam" aria-label="カメラ">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="cam-off" id="camOff">
+      <button type="button" class="btn btn-cam" id="liveBtn">カメラとマイクを入れる</button>
+      <p id="camMsg">映像は保存しません。AIに見せるときだけ、静止画を1枚送ります。</p>
+    </div>
+    <div class="cam-chips" id="camChips" hidden><span class="chip-s" id="autoChip"></span></div>
+    <button type="button" class="cam-action" id="camAction" hidden></button>
+  </section>
+
+  <button type="button" class="status" id="status" data-mode="off" hidden>
+    <span class="dot"></span><span id="statusText"></span><span class="heard" id="heard"></span>
+  </button>
+
+  <!-- ホーム -->
+  <main class="scroll" id="home">
+    <p class="lead">魚を映して「見分けて」と話しかけると、種類を見分けて捌き方を声で案内します。作業中は手元を定期的に見て、気づいたことを伝えます。</p>
+
+    <section class="card" id="keyCard" hidden>
+      <p class="note">AIに映像を見せるには、AnthropicのAPIキーが必要です。キーがなくても、手順の読み上げと声の操作は使えます。</p>
+      <button type="button" class="btn btn-accent" id="keyCardBtn">APIキーを設定する</button>
+    </section>
+
+    <section class="card" id="idBox" hidden aria-live="polite">
+      <div class="id-row">
+        <img class="thumb" id="idThumb" alt="見分けに使った映像">
+        <div>
+          <p class="id-name" id="idName">見分けています</p>
+          <p class="id-why" id="idWhy"></p>
+        </div>
+      </div>
+      <ul class="notes" id="idNotes" hidden></ul>
+      <div class="row" id="idActions" hidden>
+        <button type="button" class="btn btn-accent" id="idStartBtn">この手順で始める</button>
+        <button type="button" class="btn" id="idRetryBtn">もう一度見分ける</button>
+      </div>
+      <button type="button" class="btn btn-plain" id="idStopBtn" hidden>やめる</button>
+    </section>
+
+    <h2 class="h2">自分で捌き方を選ぶ</h2>
+    <ul class="guide-list" id="guideList"></ul>
+
+    <h2 class="h2">声で使える言葉</h2>
+    <dl class="words">
+      <dt>「次」「できた」</dt><dd>次の手順へ進む</dd>
+      <dt>「戻る」</dt><dd>前の手順に戻る</dd>
+      <dt>「もう一度」</dt><dd>いまの手順を読み直す</dd>
+      <dt>「見て」</dt><dd>手元を見て助言する</dd>
+      <dt>「〜はどう?」</dt><dd>質問に答える</dd>
+    </dl>
+
+    <p class="note">始める前に: まな板の下にぬれ布巾を敷き、よく切れる包丁とキッチンペーパーを用意してください。スマホは、まな板全体が映る位置に立てかけます。</p>
+  </main>
+
+  <!-- ガイド -->
+  <main class="scroll" id="guide" hidden>
+    <div class="ctx">
+      <p class="ctx-name"><span id="ctxGuide"></span><small id="ctxFish"></small></p>
+      <button type="button" class="btn btn-plain" id="changeBtn">魚を変える</button>
+    </div>
+    <ol class="bars" id="bars" aria-hidden="true"></ol>
+
+    <ul class="notes" id="fishNotes" hidden></ul>
+
+    <section class="step" id="stepCard" aria-live="polite">
+      <div class="step-head">
+        <span class="step-no" id="stepNo">1</span>
+        <span class="step-total" id="stepTotal">/ 11</span>
+      </div>
+      <h1 class="step-title" id="stepTitle"></h1>
+      <p class="step-say" id="stepSay"></p>
+      <p class="callout tip" id="stepTip" hidden><b>コツ</b><span></span></p>
+      <p class="callout warn" id="stepWarn" hidden><b>注意</b><span></span></p>
+      <p class="ai-made" id="aiMade" hidden>この手順はAIがこの魚に合わせて作りました。</p>
+    </section>
+
+    <section class="card done" id="doneCard" hidden>
+      <h1 class="done-title">おつかれさまでした</h1>
+      <ul>
+        <li>身はキッチンペーパーで包み、ラップをして冷蔵庫へ。</li>
+        <li>まな板と包丁は、先に水で洗ってから洗剤とお湯で洗います。</li>
+        <li>生で食べるときは、身に寄生虫がいないか明るい場所でよく見てください。</li>
+      </ul>
+      <button type="button" class="btn btn-accent" id="doneHomeBtn">別の魚を捌く</button>
+    </section>
+
+    <section class="ai" id="aiBox" hidden aria-live="polite">
+      <p class="ai-label">AIの助言</p>
+      <div class="ai-body">
+        <img class="thumb" id="aiThumb" alt="助言に使った映像" hidden>
+        <p class="ai-text" id="aiText"></p>
+      </div>
+      <button type="button" class="btn btn-accent" id="aiJumpBtn" hidden></button>
+      <button type="button" class="btn btn-plain" id="aiStopBtn" hidden>やめる</button>
+    </section>
+
+    <section class="ask" id="askBox" hidden>
+      <h2 class="h2">文字で質問する</h2>
+      <div class="chips" id="chips">
+        <button type="button" class="chip">コツをもう少し詳しく</button>
+        <button type="button" class="chip">うまく切れない</button>
+        <button type="button" class="chip">骨に身が残ってしまう</button>
+      </div>
+      <form class="ask-row" id="askForm">
+        <input type="text" id="askInput" autocomplete="off" enterkeyhint="send" placeholder="質問を入力" aria-label="質問">
+        <button type="submit" class="btn btn-accent" id="askSendBtn">聞く</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="dock" id="dock" hidden>
+    <div class="dock-row">
+      <button type="button" class="btn" id="prevBtn">前へ</button>
+      <button type="button" class="btn" id="againBtn">もう一度</button>
+      <button type="button" class="btn btn-accent" id="nextBtn">次へ</button>
+    </div>
+  </footer>
+</div>
+
+<!-- 設定 -->
+<section class="sheet" id="settings" hidden aria-label="設定">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <h1 class="sheet-title">設定</h1>
+      <button type="button" class="btn btn-plain" id="settingsClose">閉じる</button>
+    </div>
+
+    <div class="field">
+      <label for="setKey">AnthropicのAPIキー</label>
+      <input type="password" id="setKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">
+      <p class="note">キーはこの端末のブラウザの中だけに保存し、Anthropic以外には送りません。キーは <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">Claude Console</a> で作れます。利用した分だけ料金がかかります。</p>
+      <div class="row">
+        <button type="button" class="btn btn-accent" id="setTest">保存して試す</button>
+        <button type="button" class="btn" id="setKeyClear">キーを消す</button>
+      </div>
+      <p class="test-out" id="setTestOut" aria-live="polite"></p>
+    </div>
+
+    <div class="field">
+      <label for="setAuto">手元の自動チェック</label>
+      <select id="setAuto">
+        <option value="0">切(「見て」と言ったときだけ)</option>
+        <option value="15">15秒ごと</option>
+        <option value="30">30秒ごと</option>
+        <option value="60">60秒ごと</option>
+      </select>
+      <p class="note">手元に動きがあったときだけAIに静止画を送ります。間隔を短くすると、その分APIの利用料が増えます。</p>
+    </div>
+
+    <div class="field">
+      <label for="setVoice">読み上げ</label>
+      <select id="setVoice">
+        <option value="on">入</option>
+        <option value="off">切</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="setRate">読み上げの速さ</label>
+      <select id="setRate">
+        <option value="0.85">ゆっくり</option>
+        <option value="1">ふつう</option>
+        <option value="1.2">速め</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="setListen">声の操作</label>
+      <select id="setListen">
+        <option value="on">入</option>
+        <option value="off">切</option>
+      </select>
+    </div>
+
+    <details class="adv">
+      <summary>くわしい設定</summary>
+      <div class="field">
+        <label for="setModelCheck">助言に使うモデル</label>
+        <input type="text" id="setModelCheck" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="setModelId">魚の見分けに使うモデル</label>
+        <input type="text" id="setModelId" autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+    </details>
+  </div>
+</section>
+
+<script>
+"use strict";
+
+/* ================= 手順データ ================= */
+const GUIDES = {
+  sanmai: {
+    name: "三枚おろし",
+    fits: "アジ・サバ・タイ・イサキなど、たいていの魚",
+    steps: [
+      { t: "準備する",
+        say: "まな板の下にぬれ布巾を敷いて、すべらないようにします。魚の表面の水気をふき、頭を左、腹を手前に置きます。",
+        tip: "左利きの方は、これから出てくる左右をすべて逆にしてください。" },
+      { t: "うろこを取る",
+        say: "尾から頭に向かって、包丁の刃先でうろこをこそげ取ります。ひれのきわと腹側も忘れずに。両面とも取ったら、さっと洗います。",
+        tip: "アジは尾の付け根にあるかたい「ぜいご」も、尾のほうから包丁を寝かせてそぎ取ります。" },
+      { t: "頭を落とす",
+        say: "胸びれと腹びれの後ろに、包丁を斜めに入れて中骨まで切ります。裏返して同じように切り、中骨を断ち切って頭を落とします。",
+        warn: "骨を断つときは、魚を押さえる手を刃の進む先に置かないでください。" },
+      { t: "内臓を出す",
+        say: "頭の切り口から肛門まで、腹を浅く切り開きます。包丁の先で内臓をかき出します。" },
+      { t: "血合いを洗う",
+        say: "中骨に沿った薄い膜に包丁の先で切れ目を入れ、流水で血のかたまりを洗い流します。洗い終わったら、腹の中までしっかり水気をふき取ります。",
+        tip: "ここから先は水で洗いません。身が水っぽくなるのを防ぎます。" },
+      { t: "腹側から切る",
+        say: "頭側を右、腹を手前に置きます。腹の切り口から尾に向かって、中骨の上をなでるように包丁を引きます。2、3回に分けて、刃先が背骨に当たるまで切り進めます。",
+        tip: "刃が骨に当たるカリカリという感触が、うまくいっている合図です。" },
+      { t: "背側から切る",
+        say: "魚の向きを変えて、背を手前、尾を右に置きます。背びれのすぐ上に、尾から頭に向かって包丁を入れ、同じように背骨まで切り進めます。" },
+      { t: "上の身を外す",
+        say: "尾の付け根に包丁を寝かせて差し込み、向こう側まで通します。尾を押さえ、中骨の上をすべらせながら頭側へ切り進めます。最後に尾の付け根を切り離します。",
+        warn: "押さえる手は、必ず刃の後ろ側に置いてください。" },
+      { t: "反対側の身を外す",
+        say: "裏返して、今度は背側から先に包丁を入れ、次に腹側を切ります。さきほどと同じように尾の付け根から包丁を通し、身を外します。身が2枚と中骨で、三枚になりました。" },
+      { t: "腹骨をすき取る",
+        say: "身の腹側に並んだ腹骨の付け根に、包丁を寝かせて入れます。骨の下をすくうように、薄くそぎ取ります。もう1枚も同じようにします。" },
+      { t: "小骨を抜いて仕上げる",
+        say: "身の中央を指でなぞり、当たる小骨を骨抜きで頭側の方向へ引き抜きます。刺身にするときは、皮を引いて完成です。",
+        tip: "アジの皮は、頭側の端からつまんで手でむけます。" }
+    ]
+  },
+  tebiraki: {
+    name: "手開き",
+    fits: "イワシなど、身のやわらかい小魚",
+    steps: [
+      { t: "うろこを落とす",
+        say: "流水の下で、尾から頭に向かって指でなでて、うろこを落とします。",
+        tip: "イワシは傷みやすい魚です。冷たい水で、手早く進めます。" },
+      { t: "頭を落とす",
+        say: "胸びれの後ろに包丁を当て、まっすぐ頭を落とします。" },
+      { t: "内臓を出す",
+        say: "腹の部分を斜めに切り落とし、包丁の先で内臓をかき出します。腹の中を流水で洗い、水気をしっかりふき取ります。" },
+      { t: "親指で開く",
+        say: "腹の中の中骨の上に、親指を差し込みます。骨に沿って尾まで親指をすべらせ、身を左右に開きます。",
+        tip: "力を入れず、骨の上をなぞるだけで開きます。" },
+      { t: "中骨を外す",
+        say: "尾の付け根で中骨を折ります。身を指で押さえながら、中骨を頭側へゆっくり引きはがします。" },
+      { t: "腹骨と背びれを取る",
+        say: "左右の腹骨を、包丁を寝かせて薄くそぎ取ります。背びれは、包丁で押さえて身を引くと取れます。これで完成です。" }
+    ]
+  },
+  gomai: {
+    name: "五枚おろし",
+    fits: "ヒラメ・カレイなど、平たい魚",
+    steps: [
+      { t: "ぬめりとうろこを取る",
+        say: "塩をふって表面をこすり、ぬめりを洗い流します。包丁の刃先かたわしで、尾から頭に向かって両面のうろこを取ります。" },
+      { t: "頭と内臓を取る",
+        say: "胸びれの後ろから、頭に沿って斜めに包丁を入れます。裏からも同じように切り、頭を落として内臓を引き出します。腹の中を洗い、水気をふき取ります。",
+        warn: "内臓の中の緑色の袋を破ると、身に苦味が移ります。そっと引き出してください。" },
+      { t: "中央に切れ目を入れる",
+        say: "色のついた面を上にして置きます。身の真ん中、背骨の上を、頭側から尾まで、骨に当たる深さで一直線に切ります。" },
+      { t: "ふちに切れ目を入れる",
+        say: "ひれの付け根の内側に沿って、身のまわりに浅く切れ目を入れます。尾の付け根にも、横に切れ目を入れます。" },
+      { t: "片側の身を外す",
+        say: "中央の切れ目から包丁を寝かせて入れます。骨の上をなでるように、外側のひれに向かって少しずつ切り進め、身を外します。",
+        tip: "包丁を立てると骨に身が残ります。寝かせたまま、刃先で骨をなぞります。" },
+      { t: "もう片側の身を外す",
+        say: "魚の向きを変えて、中央の切れ目から反対側も同じように切り進め、身を外します。" },
+      { t: "裏面も同じように外す",
+        say: "魚を裏返し、中央とふちに切れ目を入れてから、左右の身を外します。身が4枚と骨で、五枚になりました。" },
+      { t: "腹骨をすいて仕上げる",
+        say: "身に残った腹骨を、包丁を寝かせてそぎ取ります。ふちのえんがわを切り分け、刺身にするなら皮を引いて完成です。" }
+    ]
+  },
+  ika: {
+    name: "イカの下ごしらえ",
+    fits: "スルメイカ・ヤリイカなど",
+    steps: [
+      { t: "胴と内臓のつながりを外す",
+        say: "胴の中に指を入れて、胴と内臓がくっついている所を、指でなぞって外します。" },
+      { t: "足と内臓を引き抜く",
+        say: "目の少し上をしっかり持ち、胴を押さえて、足ごと内臓をゆっくり引き抜きます。",
+        warn: "急いで引くと墨袋が破れます。ゆっくり、まっすぐ引いてください。" },
+      { t: "軟骨を抜いて洗う",
+        say: "胴の内側にある、透明で細長い軟骨を引き抜きます。胴の中を流水で洗い、水気をふき取ります。" },
+      { t: "皮をむく",
+        say: "三角のひれ、えんぺらの付け根に指を入れます。胴の先に向かって引っ張ると、皮と一緒にはがれます。残った皮は、キッチンペーパーでつまんでむきます。" },
+      { t: "内臓を切り離す",
+        say: "目のすぐ下に包丁を入れて、足と内臓を切り離します。",
+        tip: "わたを料理に使うときは、墨袋を指でそっとつまんで外しておきます。" },
+      { t: "くちばしと目を取る",
+        say: "足の付け根を開き、真ん中にあるかたいくちばしを、指で押し出して取ります。目を取るときは、水を張ったボウルの中で行います。" },
+      { t: "足を整える",
+        say: "足の吸盤を、包丁の刃先でしごいて落とします。長い2本の先を切りそろえ、食べやすく切り分けて完成です。",
+        tip: "刺身にするときは、身に細かく切れ目を入れると食べやすく、寄生虫対策にもなります。" }
+    ]
+  }
+};
+const GUIDE_IDS = Object.keys(GUIDES);
+
+/* ================= 設定と状態 ================= */
+const $ = (id) => document.getElementById(id);
+const CFG_KEY = "sabaki-web.cfg.v1", STATE_KEY = "sabaki-web.state.v1";
+const cfg = {
+  apiKey: "", autoSec: 30, voiceOn: true, rate: 1, listenOn: true,
+  modelCheck: "claude-haiku-5-5", modelIdentify: "claude-sonnet-5-5"
+};
+function loadCfg() {
+  try {
+    const d = JSON.parse(localStorage.getItem(CFG_KEY) || "null");
+    if (d && typeof d === "object") {
+      for (const k of Object.keys(cfg)) if (typeof d[k] === typeof cfg[k]) cfg[k] = d[k];
+    }
+  } catch (e) {}
+}
+function saveCfg() { try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (e) {} }
+
+const S = { guideId: null, guideName: "", fish: "", notes: [], steps: [], custom: false, i: 0, done: false, history: [] };
+let view = "home";
+let live = false;            // 「カメラとマイクを入れる」を押したあと
+let camErr = "";
+let pendingId = null;
+let aiCtl = null, aiIsAuto = false, lastAiAt = 0, lastSig = null, autoFails = 0, autoPaused = false;
+
+function saveState() {
+  try {
+    localStorage.setItem(STATE_KEY, JSON.stringify({
+      guideId: S.guideId, guideName: S.guideName, fish: S.fish, notes: S.notes,
+      steps: S.custom ? S.steps : null, custom: S.custom, i: S.i, done: S.done
+    }));
+  } catch (e) {}
+}
+function loadState() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STATE_KEY) || "null");
+    if (!d || !d.guideId) return;
+    const steps = d.custom ? d.steps : (GUIDES[d.guideId] && GUIDES[d.guideId].steps);
+    if (!Array.isArray(steps) || !steps.length) return;
+    Object.assign(S, {
+      guideId: d.guideId, guideName: String(d.guideName || ""), fish: String(d.fish || ""),
+      notes: Array.isArray(d.notes) ? d.notes.map(String) : [], steps, custom: !!d.custom,
+      i: Math.min(Math.max(0, d.i | 0), steps.length - 1), done: !!d.done
+    });
+  } catch (e) {}
+}
+
+/* ================= 読み上げ ================= */
+const synth = ("speechSynthesis" in window && "SpeechSynthesisUtterance" in window) ? window.speechSynthesis : null;
+let synthPrimed = false, speaking = false, speakToken = 0, speakStartedAt = 0, lastSpeechEnd = 0;
+let liveUtterances = [];     // 再生中に解放されないよう参照を持っておく
+
+function jaVoice() {
+  try {
+    const vs = synth.getVoices().filter((v) => /^ja/i.test(v.lang));
+    return vs.find((v) => v.localService) || vs[0] || null;
+  } catch (e) { return null; }
+}
+function primeVoice() {
+  if (synthPrimed || !synth) return;
+  try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0; u.lang = "ja-JP";
+    synth.speak(u);
+    synthPrimed = true;
+  } catch (e) {}
+}
+function doneSpeaking(token) {
+  if (token !== speakToken || !speaking) return;
+  speaking = false;
+  liveUtterances = [];
+  lastSpeechEnd = Date.now();
+  renderStatus();
+  scheduleRec(350);
+}
+function speak(text) {
+  if (!cfg.voiceOn || !synth || !text) return;
+  const token = ++speakToken;
+  speaking = true;
+  speakStartedAt = Date.now();
+  stopRec();                 // 自分の声を聞き取らないよう、話す間はマイクを止める
+  renderStatus();
+  const parts = (text.match(/[^。!?]+[。!?]*/g) || [text]).map((s) => s.trim()).filter(Boolean);
+  const run = () => {
+    if (token !== speakToken) return;
+    const v = jaVoice();
+    liveUtterances = [];
+    parts.forEach((p, k) => {
+      try {
+        const u = new SpeechSynthesisUtterance(p);
+        u.lang = "ja-JP"; u.rate = cfg.rate;
+        if (v) u.voice = v;
+        if (k === parts.length - 1) {
+          u.onend = () => doneSpeaking(token);
+          u.onerror = () => doneSpeaking(token);
+        }
+        liveUtterances.push(u);
+        synth.speak(u);
+      } catch (e) {}
+    });
+    speakStartedAt = Date.now();
+  };
+  try {
+    if (synth.speaking || synth.pending) { synth.cancel(); setTimeout(run, 120); }
+    else run();
+  } catch (e) { doneSpeaking(token); }
+}
+function stopVoice() {
+  speakToken++;
+  try { if (synth) synth.cancel(); } catch (e) {}
+  if (speaking) {
+    speaking = false;
+    liveUtterances = [];
+    lastSpeechEnd = Date.now();
+    renderStatus();
+    scheduleRec(300);
+  }
+}
+
+/* ================= 聞き取り ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let rec = null, recActive = false, recTimer = null, micBlocked = false, lastRecEvent = 0;
+let heardText = "", heardTimer = null, heardClear = null, lastHeardAt = 0;
+
+function setupRec() {
+  if (!SR || rec) return;
+  rec = new SR();
+  rec.lang = "ja-JP";
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  rec.onstart = () => { recActive = true; lastRecEvent = Date.now(); renderStatus(); };
+  rec.onend = () => { recActive = false; renderStatus(); scheduleRec(400); };
+  rec.onerror = (e) => {
+    if (e && (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture")) {
+      micBlocked = true;
+      renderStatus();
+    }
+  };
+  rec.onresult = (ev) => {
+    lastRecEvent = Date.now();
+    if (speaking) return;
+    let txt = "", final = false;
+    for (let k = 0; k < ev.results.length; k++) {
+      txt += ev.results[k][0].transcript;
+      final = ev.results[k].isFinal;
+    }
+    heardText = txt.trim();
+    lastHeardAt = Date.now();
+    showHeard(heardText, "");
+    clearTimeout(heardTimer);
+    if (final) commitHeard();
+    else heardTimer = setTimeout(commitHeard, 1300);   // iPhoneは確定の合図が来ないことがある
+  };
+}
+function commitHeard() {
+  clearTimeout(heardTimer);
+  const t = heardText;
+  heardText = "";
+  if (!t) return;
+  try { rec.abort(); } catch (e) {}     // 次の発話を新しく聞き始める
+  handleUtterance(t);
+}
+function wantRec() {
+  return live && cfg.listenOn && !!rec && !speaking && !micBlocked && !document.hidden && $("settings").hidden;
+}
+function startRec() {
+  clearTimeout(recTimer); recTimer = null;
+  if (!wantRec() || recActive) return;
+  try { rec.start(); } catch (e) {}
+}
+function scheduleRec(ms) {
+  clearTimeout(recTimer);
+  recTimer = setTimeout(startRec, ms);
+}
+function stopRec() {
+  clearTimeout(recTimer); recTimer = null;
+  clearTimeout(heardTimer); heardText = "";
+  try { if (rec) rec.abort(); } catch (e) {}
+}
+function showHeard(text, action) {
+  $("heard").textContent = text ? "「" + text.slice(0, 40) + "」" + (action ? " → " + action : "") : "";
+  clearTimeout(heardClear);
+  if (text) heardClear = setTimeout(() => { $("heard").textContent = ""; }, 6000);
+}
+
+/* ---- 言葉から操作を決める ---- */
+const Q_RE = /(教えて|おしえて|どう|どこ|どっち|どれ|どの|なに|何|なぜ|なんで|ですか|ますか|かな|合って|あって|大丈夫|だいじょうぶ|できない|わからない|分からない|コツ|こつ|いい[??]?$|か[??]?$|[??])/;
+const CMD = {
+  stop: /(ストップ|止めて|とめて|静かに|しずかに|黙って)/,
+  repeat: /(もう一度|もういちど|もう一回|もういっかい|もっかい|繰り返|くりかえ|リピート)/,
+  prev: /(戻|もど|前へ|前に|まえへ|まえに|一つ前|ひとつ前|ひとつまえ|^前$|^まえ$)/,
+  next: /(次|つぎ|進んで|すすんで|進めて|すすめて|できた|できました|終わった|おわった|終わりました|おわりました|オッケー|OK)/i,
+  look: /(見て|みて|チェック|確認|かくにん)/,
+  identify: /(見分け|みわけ|判別|何の魚|なんの魚|なんのさかな|これ何|これなに|これは何|これはなに)/,
+  start: /(始め|はじめ|スタート|お願い|おねがい|^はい$|^うん$)/
+};
+/* 返り値: stop / repeat / prev / next / look / identify / start / ask / "" */
+function parseCommand(raw, ctx) {
+  const t = String(raw).replace(/[\s、。,.!!]/g, "");
+  if (!t) return "";
+  if (CMD.stop.test(t)) return "stop";
+  const isQ = Q_RE.test(t.replace(/もど/g, ""));
+  if (ctx.view === "home") {
+    if (CMD.identify.test(t)) return "identify";
+    if (ctx.pending && !isQ && CMD.start.test(t)) return "start";
+    if (CMD.look.test(t)) return "identify";
+    return "";
+  }
+  if (ctx.done) return "";
+  if (isQ) return "ask";
+  if (CMD.repeat.test(t)) return "repeat";
+  if (CMD.prev.test(t)) return "prev";
+  if (CMD.next.test(t)) return "next";
+  if (CMD.look.test(t)) return "look";
+  return "";
+}
+function handleUtterance(text) {
+  const a = parseCommand(text, { view, pending: !!pendingId, done: S.done });
+  const label = { stop: "止める", repeat: "もう一度", prev: "前へ", next: "次へ", look: "見てもらう", identify: "見分ける", start: "始める", ask: "質問" }[a] || "";
+  showHeard(text, label);
+  switch (a) {
+    case "stop": stopVoice(); break;
+    case "repeat": speak(stepSpeech()); break;
+    case "prev": goTo(S.i - 1, true); break;
+    case "next": if (S.i >= S.steps.length - 1) finish(); else goTo(S.i + 1, true); break;
+    case "look": askAI({ frame: grabFrame(), question: "" }); break;
+    case "ask": askAI({ frame: grabFrame(), question: text }); break;
+    case "identify": identify(); break;
+    case "start": if (pendingId) startGuide(pendingId); break;
+  }
+}
+
+/* ================= カメラ ================= */
+const video = $("video");
+let stream = null;
+const cv = document.createElement("canvas");
+const sg = document.createElement("canvas");
+sg.width = sg.height = 16;
+
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw { name: "NoCamera" };
+  stopCamera();
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+  });
+  video.srcObject = stream;
+  try { await video.play(); } catch (e) {}
+  const track = stream.getVideoTracks()[0];
+  if (track) track.addEventListener("ended", renderLive);
+}
+function stopCamera() {
+  try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  stream = null;
+}
+function camLive() {
+  if (!stream) return false;
+  const t = stream.getVideoTracks()[0];
+  return !!(t && t.readyState === "live" && video.videoWidth > 0);
+}
+function grabFrame(maxSide) {
+  if (!camLive()) return null;
+  try {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const k = Math.min(1, (maxSide || 1024) / Math.max(vw, vh));
+    cv.width = Math.max(1, Math.round(vw * k));
+    cv.height = Math.max(1, Math.round(vh * k));
+    cv.getContext("2d").drawImage(video, 0, 0, cv.width, cv.height);
+    const url = cv.toDataURL("image/jpeg", 0.8);
+    const g = sg.getContext("2d", { willReadFrequently: true });
+    g.drawImage(video, 0, 0, 16, 16);
+    const d = g.getImageData(0, 0, 16, 16).data;
+    const sig = new Uint8Array(256);
+    for (let p = 0; p < 256; p++) sig[p] = (d[p * 4] * 3 + d[p * 4 + 1] * 6 + d[p * 4 + 2]) / 10;
+    return { url, b64: url.slice(url.indexOf(",") + 1), sig };
+  } catch (e) { return null; }
+}
+function sigDiff(a, b) {
+  let s = 0;
+  for (let p = 0; p < 256; p++) s += Math.abs(a[p] - b[p]);
+  return s / 256;
+}
+
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if ("wakeLock" in navigator && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    }
+  } catch (e) {}
+}
+
+/* タップのたびに: 音声の準備、画面の常時点灯、マイクの再開 */
+function tap() {
+  primeVoice();
+  keepAwake();
+  if (micBlocked) { micBlocked = false; renderStatus(); }
+  if (live && !speaking) startRec();
+}
+
+/* ================= 画面 ================= */
+function show(v) {
+  view = v;
+  $("app").dataset.view = v;
+  $("home").hidden = v !== "home";
+  $("guide").hidden = v !== "guide";
+  $("dock").hidden = v !== "guide";
+  renderLive();
+}
+
+function renderLive() {
+  const on = camLive();
+  $("camOff").hidden = on;
+  $("liveBtn").textContent = live ? "カメラを入れ直す" : "カメラとマイクを入れる";
+  $("camMsg").textContent = camErr || "映像は保存しません。AIに見せるときだけ、静止画を1枚送ります。";
+
+  const act = $("camAction");
+  act.hidden = !(on && cfg.apiKey) || (view === "guide" && S.done);
+  act.textContent = view === "home" ? "この魚を見分ける" : "見てもらう";
+
+  const chip = $("autoChip");
+  $("camChips").hidden = !(on && view === "guide" && !S.done);
+  chip.textContent = !cfg.apiKey ? "AI 未設定"
+    : autoPaused ? "自動チェック 停止中"
+    : cfg.autoSec ? "自動チェック " + cfg.autoSec + "秒ごと"
+    : "自動チェック 切";
+
+  $("keyCard").hidden = !!cfg.apiKey;
+  renderStatus();
+}
+
+function renderStatus() {
+  const el = $("status");
+  if (!live) { el.hidden = true; return; }
+  el.hidden = false;
+  let mode = "off", text = "マイクを準備しています";
+  if (speaking) { mode = "speak"; text = "話しています(タップで止める)"; }
+  else if (aiCtl && !aiIsAuto) { mode = "think"; text = "考えています"; }
+  else if (!SR) { text = "このブラウザは声の操作に対応していません"; }
+  else if (!cfg.listenOn) { text = "声の操作は切になっています"; }
+  else if (micBlocked) { mode = "blocked"; text = "マイクが止まっています。ここをタップ"; }
+  else if (recActive) { mode = "listen"; text = "聞いています"; }
+  el.dataset.mode = mode;
+  $("statusText").textContent = text;
+}
+
+function renderHomeList() {
+  const ul = $("guideList");
+  ul.textContent = "";
+  for (const id of GUIDE_IDS) {
+    const g = GUIDES[id];
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "guide-item";
+    const name = document.createElement("b"); name.textContent = g.name;
+    const fits = document.createElement("span"); fits.textContent = g.fits;
+    const n = document.createElement("em"); n.textContent = g.steps.length + " 手順";
+    b.append(name, fits, n);
+    b.addEventListener("click", () => { tap(); startGuide({ guideId: id, fish: "", notes: [] }); });
+    li.append(b); ul.append(li);
+  }
+}
+function fillNotes(ul, notes) {
+  ul.textContent = "";
+  for (const n of notes) {
+    const li = document.createElement("li");
+    li.textContent = n;
+    ul.append(li);
+  }
+  ul.hidden = notes.length === 0;
+}
+function renderGuide() {
+  $("ctxGuide").textContent = S.guideName;
+  $("ctxFish").textContent = S.fish || "";
+  fillNotes($("fishNotes"), S.i === 0 && !S.done ? S.notes : []);
+  const bars = $("bars");
+  bars.textContent = "";
+  S.steps.forEach((_, k) => {
+    const li = document.createElement("li");
+    if (S.done || k <= S.i) li.className = "on";
+    bars.append(li);
+  });
+  $("stepCard").hidden = S.done;
+  $("doneCard").hidden = !S.done;
+  if (!S.done) {
+    const st = S.steps[S.i];
+    $("stepNo").textContent = String(S.i + 1);
+    $("stepTotal").textContent = "/ " + S.steps.length;
+    $("stepTitle").textContent = st.t;
+    $("stepSay").textContent = st.say;
+    $("stepTip").hidden = !st.tip;
+    $("stepTip").querySelector("span").textContent = st.tip || "";
+    $("stepWarn").hidden = !st.warn;
+    $("stepWarn").querySelector("span").textContent = st.warn || "";
+    $("aiMade").hidden = !S.custom;
+  }
+  $("prevBtn").disabled = !S.done && S.i === 0;
+  $("againBtn").disabled = S.done;
+  $("nextBtn").disabled = S.done;
+  $("nextBtn").textContent = (!S.done && S.i === S.steps.length - 1) ? "完了" : "次へ";
+  $("askBox").hidden = !cfg.apiKey || S.done;
+  renderLive();
+}
+function stepSpeech() {
+  const st = S.steps[S.i];
+  let s = "手順" + (S.i + 1) + "。" + st.t + "。" + st.say;
+  if (st.tip) s += st.tip;
+  if (st.warn) s += "注意。" + st.warn;
+  return s;
+}
+function startGuide(plan) {
+  cancelAI();
+  const custom = plan.guideId === "custom";
+  Object.assign(S, {
+    guideId: plan.guideId, custom,
+    guideName: custom ? (plan.customName || "この魚の捌き方") : GUIDES[plan.guideId].name,
+    steps: custom ? plan.customSteps : GUIDES[plan.guideId].steps,
+    fish: plan.fish || "", notes: plan.notes || [], i: 0, done: false, history: []
+  });
+  pendingId = null;
+  lastAiAt = Date.now(); lastSig = null; autoFails = 0;
+  $("aiBox").hidden = true;
+  show("guide");
+  renderGuide();
+  $("guide").scrollTop = 0;
+  saveState();
+  let intro = (S.fish ? S.fish + "の" : "") + S.guideName + "を始めます。";
+  if (S.notes.length) intro += S.notes.map((n) => /[。!?]$/.test(n) ? n : n + "。").join("");
+  speak(intro + stepSpeech());
+}
+function goTo(i, talk) {
+  S.done = false;
+  S.i = Math.min(Math.max(0, i), S.steps.length - 1);
+  lastAiAt = Date.now();      // 手順が変わった直後は自動チェックを待つ
+  renderGuide();
+  $("guide").scrollTop = 0;
+  saveState();
+  if (talk) speak(stepSpeech());
+}
+function finish() {
+  cancelAI();
+  S.done = true;
+  $("aiBox").hidden = true;
+  renderGuide();
+  $("guide").scrollTop = 0;
+  saveState();
+  speak("これで完了です。おつかれさまでした。身は冷蔵庫へ、まな板と包丁は先に水で洗ってください。");
+}
+function goHome() {
+  cancelAI();
+  stopVoice();
+  S.guideId = null; S.done = false;
+  saveState();
+  $("idBox").hidden = true;
+  pendingId = null;
+  show("home");
+  $("home").scrollTop = 0;
+}
+
+/* ================= AI ================= */
+let apiVersion = "2026-10-21";
+async function callClaude(o) {
+  const content = [];
+  if (o.image) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: o.image } });
+  content.push({ type: "text", text: o.prompt });
+  const body = JSON.stringify({ model: o.model, max_tokens: o.maxTokens, messages: [{ role: "user", content }] });
+  const post = (version) => fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    signal: o.signal,
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": cfg.apiKey,
+      "anthropic-version": version,
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body
+  });
+  const fail = async (res) => {
+    let j = null;
+    try { j = await res.json(); } catch (e) {}
+    return { status: res.status, message: (j && j.error && j.error.message) || "" };
+  };
+  let res = await post(apiVersion);
+  if (!res.ok) {
+    let err = await fail(res);
+    if (err.status === 400 && /version/i.test(err.message) && apiVersion !== "2023-06-01") {
+      apiVersion = "2023-06-01";
+      res = await post(apiVersion);
+      if (!res.ok) err = await fail(res); else err = null;
+    }
+    if (err) throw err;
+  }
+  const j = await res.json();
+  return (j.content || []).filter((b) => b && b.type === "text").map((b) => b.text).join("");
+}
+function parseLoose(text) {
+  try { return JSON.parse(text); } catch (e) {}
+  const a = text.search(/[{[]/);
+  const b = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  if (a >= 0 && b > a) { try { return JSON.parse(text.slice(a, b + 1)); } catch (e) {} }
+  throw { code: "invalid_json" };
+}
+function isAbort(e) { return !!(e && e.name === "AbortError"); }
+function errText(e) {
+  const st = e && e.status, msg = (e && e.message) || "";
+  if (e && e.code === "invalid_json") return "答えをうまく受け取れませんでした。もう一度お試しください。";
+  if (st === 401) return "APIキーが正しくありません。設定で入れ直してください。";
+  if (st === 403) return "このAPIキーでは利用できません。Claude Consoleで権限を確認してください。";
+  if (st === 404) return "モデル名が見つかりません。設定の「くわしい設定」を確認してください。";
+  if (st === 429) return "利用が集中しているか、上限に達しました。少し待ってからお試しください。";
+  if (st === 400 && /credit|balance|billing/i.test(msg)) return "APIのクレジット残高が足りません。Claude Consoleで確認してください。";
+  if (st === 413) return "映像が大きすぎました。もう一度お試しください。";
+  if (st >= 500) return "AI側が混み合っています。少し待ってからお試しください。";
+  if (st === 400) return "リクエストが受け付けられませんでした。" + (msg ? "(" + msg.slice(0, 90) + ")" : "");
+  return "通信できませんでした。電波の状態を確認してください。";
+}
+function cancelAI() {
+  if (aiCtl) { try { aiCtl.abort(); } catch (e) {} aiCtl = null; renderStatus(); }
+}
+
+/* ---- 魚の見分け ---- */
+function identifyPrompt() {
+  return [
+    "あなたは魚の捌き方を教える料理の先生です。添付の画像は、家庭の台所でこれから捌く魚介をスマホのカメラで映したものです。",
+    "画像を見て、次の形のJSONだけで答えてください。",
+    '{"found":true,"name":"マアジ","sure":"high","guide":"sanmai","why":"尾の付け根にぜいごが見える","notes":["ぜいごを先に取る"],"guideName":"","steps":[]}',
+    "",
+    "found: 捌く対象の魚介が写っていて種類の見当がつくならtrue。写っていない、暗い、判断できないならfalse(そのときwhyに、どう映し直せばよいかを1文で書く)。",
+    "name: 魚の和名。sure: 確からしさ。high / mid / low のどれか。",
+    "why: そう判断した見た目の特徴を1文、40字以内。",
+    "guide: 次から1つ選ぶ。",
+    "  sanmai = 三枚おろし(アジ、サバ、タイ、イサキ、サンマ、ブリの若魚など一般的な形の魚)",
+    "  tebiraki = 手開き(イワシなど身のやわらかい小魚)",
+    "  gomai = 五枚おろし(ヒラメ、カレイなど平たい魚)",
+    "  ika = イカの下ごしらえ",
+    "  custom = 上のどれにも合わない魚介(タコ、エビ、アナゴ、貝、太刀魚など)。このときだけ guideName に捌き方の名前を入れ、steps に手順を6〜10個書く。",
+    "  stop = フグなど、家庭で捌いてはいけない魚。whyに理由を書く。",
+    'steps: customのときだけ [{"t":"手順名(12字以内)","say":"話し言葉の指示を2〜3文。包丁を入れる場所と向きを具体的に"}]。それ以外は空配列。',
+    "notes: この魚ならではの注意点を2つまで、各40字以内の話し言葉で。ひれやえらのとげ、毒のあるとげ、寄生虫、身割れのしやすさなど。なければ空配列。"
+  ].join("\n");
+}
+async function identify() {
+  if (!cfg.apiKey) { speak("魚の見分けには、APIキーの設定が必要です。"); return; }
+  const frame = grabFrame(1280);
+  if (!frame) { speak("カメラが入っていません。画面のボタンでカメラを入れてください。"); return; }
+  const box = $("idBox");
+  box.hidden = false;
+  $("idThumb").src = frame.url;
+  $("idName").textContent = "見分けています";
+  $("idWhy").textContent = "10秒から30秒ほどかかります。";
+  $("idNotes").hidden = true;
+  $("idActions").hidden = true;
+  $("idStopBtn").hidden = false;
+  box.scrollIntoView({ block: "nearest" });
+
+  cancelAI();
+  const ctl = aiCtl = new AbortController();
+  aiIsAuto = false;
+  pendingId = null;
+  speak("魚を見分けています。少し待ってください。");
+  renderStatus();
+  try {
+    const text = await callClaude({ prompt: identifyPrompt(), image: frame.b64, model: cfg.modelIdentify, maxTokens: 3000, signal: ctl.signal });
+    if (aiCtl !== ctl) return;
+    showIdResult(parseLoose(text) || {});
+  } catch (e) {
+    if (isAbort(e)) { if (aiCtl === ctl || aiCtl === null) box.hidden = true; return; }
+    $("idName").textContent = "見分けられませんでした";
+    $("idWhy").textContent = errText(e) + " 下から捌き方を選んで始めることもできます。";
+    $("idActions").hidden = false;
+    $("idStartBtn").hidden = true;
+    speak("見分けられませんでした。画面を確認してください。");
+  } finally {
+    if (aiCtl === ctl) { aiCtl = null; $("idStopBtn").hidden = true; renderStatus(); }
+  }
+}
+function showIdResult(r) {
+  const name = String(r.name || "").slice(0, 30);
+  const why = String(r.why || "").slice(0, 120).replace(/[。.]+$/, "");
+  const notes = Array.isArray(r.notes) ? r.notes.slice(0, 2).map((n) => String(n).slice(0, 80)) : [];
+  $("idActions").hidden = false;
+  $("idStartBtn").hidden = true;
+  fillNotes($("idNotes"), []);
+
+  if (!r.found || !name) {
+    $("idName").textContent = "見分けられませんでした";
+    $("idWhy").textContent = (why || "魚の全体が明るく映るように置き直してください") + "。";
+    speak("見分けられませんでした。" + $("idWhy").textContent);
+    return;
+  }
+  if (r.guide === "stop") {
+    $("idName").textContent = name + "は捌かないでください";
+    $("idWhy").textContent = (why || "家庭で捌くと危険な魚です") + "。";
+    fillNotes($("idNotes"), notes);
+    speak(name + "に見えます。この魚は家庭で捌かないでください。" + why + "。");
+    return;
+  }
+  let plan = null;
+  if (GUIDE_IDS.includes(r.guide)) {
+    plan = { guideId: r.guide, fish: name, notes };
+  } else if (r.guide === "custom" && Array.isArray(r.steps)) {
+    const steps = r.steps
+      .filter((s) => s && s.t && s.say)
+      .slice(0, 12)
+      .map((s) => ({ t: String(s.t).slice(0, 30), say: String(s.say).slice(0, 300) }));
+    if (steps.length >= 3) {
+      plan = { guideId: "custom", fish: name, notes, customSteps: steps, customName: String(r.guideName || "").slice(0, 24) || (name + "の捌き方") };
+    }
+  }
+  if (!plan) plan = { guideId: "sanmai", fish: name, notes };
+
+  pendingId = plan;
+  const gName = plan.guideId === "custom" ? plan.customName : GUIDES[plan.guideId].name;
+  const sure = r.sure === "high" ? "" : (r.sure === "mid" ? "たぶん" : "自信はありませんが、");
+  const sureLabel = r.sure === "high" ? "高" : (r.sure === "mid" ? "中" : "低");
+  $("idName").textContent = name;
+  $("idWhy").textContent = "確からしさ: " + sureLabel + "。" + (why ? why + "。" : "") + "「" + gName + "」で案内します。";
+  fillNotes($("idNotes"), notes);
+  $("idStartBtn").hidden = false;
+  $("idStartBtn").textContent = gName + "を始める";
+  speak(sure + name + "に見えます。" + gName + "で案内します。よければ、始めて、と言ってください。");
+}
+
+/* ---- 途中の助言・質問・自動チェック ---- */
+function checkPrompt(question, hasImage, auto) {
+  const list = S.steps.map((s, k) => (k + 1) + ". " + s.t + ": " + s.say).join("\n");
+  const hist = S.history.slice(-3).map((h) => (h.q ? "調理者: " + h.q + "\n" : "") + "先生: " + h.a).join("\n");
+  const lines = [
+    "あなたは魚の捌き方を隣で教える料理の先生です。調理者は家庭の台所にいて、手が濡れているので、あなたの答えはスマホが読み上げます。",
+    "魚: " + (S.fish || "不明") + " / 捌き方: " + S.guideName,
+    "手順一覧:",
+    list,
+    "いま画面に出ている手順: " + (S.i + 1),
+    hist ? "直前のやりとり:\n" + hist : "",
+    hasImage ? "添付の画像は、立てかけたスマホのカメラがいま映している手元です。" : "画像はありません。"
+  ];
+  if (auto) {
+    lines.push(
+      "これは定期的な自動チェックで、調理者は質問していません。次のどれかに当てはまるときだけ say に1〜2文、60字以内で伝え、それ以外は say を空文字にしてください。",
+      "(1) けがにつながる持ち方や刃の向きが見える。",
+      "(2) いまの手順のやり方が明らかに違っている。",
+      "(3) いまの手順が終わったように見える。このときは、次へ進むよう短く促す。",
+      "魚や手元が映っていない、前回から変化がない、判断できない、すでに伝えた内容と同じ、のどれかなら必ず空文字にする。",
+      "",
+      '次の形のJSONだけで答えてください。 {"say":"","step":3}',
+      "say: 話し言葉の日本語。記号、箇条書き、絵文字は使わない。",
+      "step: 画像の状態が手順一覧の何番に当たるかの数字。判断できないときは null。"
+    );
+  } else {
+    lines.push(
+      "調理者の質問: " + (question || "いまの状態を見て、合っているかどうかと、次にやることを教えてください。"),
+      "",
+      '次の形のJSONだけで答えてください。 {"say":"…","step":3}',
+      "say: 話し言葉の日本語で2〜4文、合計140字以内。記号、箇条書き、絵文字は使わない。最初に結論を言う。けがにつながる持ち方や刃の向きが見えたら、それを最初に伝える。画像から分からないことは分からないと言い、どこを映せばよいかを伝える。",
+      "step: 画像の状態が手順一覧の何番に当たるかの数字。画像がない、または判断できないときは null。"
+    );
+  }
+  return lines.filter((l) => l !== "").join("\n");
+}
+function showAI(text, frame) {
+  const box = $("aiBox");
+  box.hidden = false;
+  const th = $("aiThumb");
+  if (frame) { th.src = frame.url; th.hidden = false; } else th.hidden = true;
+  $("aiText").textContent = text;
+  $("aiJumpBtn").hidden = true;
+}
+async function askAI(o) {
+  const auto = !!o.auto;
+  if (!cfg.apiKey) {
+    if (!auto) { showAI("AIの助言にはAPIキーが必要です。右上の「設定」から入れてください。"); speak("AIの助言には、設定が必要です。"); }
+    return;
+  }
+  if (auto && aiCtl) return;
+  cancelAI();
+  const ctl = aiCtl = new AbortController();
+  aiIsAuto = auto;
+  lastAiAt = Date.now();
+  if (o.frame) lastSig = o.frame.sig;
+  const text = $("aiText");
+  if (!auto) {
+    showAI(o.frame ? "手元を見ています" : "考えています", o.frame);
+    text.classList.add("busy");
+    $("aiStopBtn").hidden = false;
+    $("aiBox").scrollIntoView({ block: "nearest" });
+    speak(o.frame ? "見ています。" : "考えています。");
+  }
+  renderStatus();
+  try {
+    const out = await callClaude({
+      prompt: checkPrompt(o.question, !!o.frame, auto),
+      image: o.frame ? o.frame.b64 : null,
+      model: cfg.modelCheck, maxTokens: 1024, signal: ctl.signal
+    });
+    if (aiCtl !== ctl) return;
+    const r = parseLoose(out) || {};
+    const answer = String(r.say || "").trim().slice(0, 400);
+    autoFails = 0;
+    if (!auto) autoPaused = false;
+    if (!answer) {
+      if (auto) return;
+      throw { code: "invalid_json" };
+    }
+    showAI(answer, o.frame);
+    S.history.push({ q: auto ? "" : (o.question || "(手元を見てほしい)"), a: answer });
+    if (S.history.length > 4) S.history.shift();
+    const n = Number.isInteger(r.step) ? r.step : null;
+    if (n && n >= 1 && n <= S.steps.length && n !== S.i + 1) {
+      const jb = $("aiJumpBtn");
+      jb.textContent = "手順" + n + "「" + S.steps[n - 1].t + "」を表示";
+      jb.dataset.step = String(n - 1);
+      jb.hidden = false;
+    }
+    speak(answer);
+  } catch (e) {
+    if (isAbort(e)) { if (!auto && (aiCtl === ctl || aiCtl === null)) $("aiBox").hidden = true; return; }
+    if (auto) {
+      autoFails++;
+      const fatal = e && (e.status === 400 || e.status === 401 || e.status === 403 || e.status === 404);
+      if (fatal || autoFails >= 3) {
+        autoPaused = true;
+        showAI(errText(e) + " 自動チェックを止めました。「見て」と言うと、もう一度試します。");
+      }
+      return;
+    }
+    showAI(errText(e), o.frame);
+    speak("うまくいきませんでした。画面を確認してください。");
+  } finally {
+    if (aiCtl === ctl) {
+      aiCtl = null;
+      text.classList.remove("busy");
+      $("aiStopBtn").hidden = true;
+      renderLive();
+    }
+  }
+}
+function sendQuestion(q) {
+  const question = (q || $("askInput").value).trim();
+  if (!question) return;
+  $("askInput").value = "";
+  $("askInput").blur();
+  askAI({ frame: grabFrame(), question });
+}
+
+/* ---- 0.5秒ごとの見回り: 自動チェック、読み上げ終了の検知、マイクの再開 ---- */
+function tick() {
+  const now = Date.now();
+  if (speaking && now - speakStartedAt > 1500 && synth && !synth.speaking && !synth.pending) doneSpeaking(speakToken);
+  if (wantRec()) {
+    if (!recActive && !recTimer) startRec();
+    else if (recActive && now - lastRecEvent > 45000) { try { rec.abort(); } catch (e) {} }
+  }
+  if (!cfg.autoSec || autoPaused || !cfg.apiKey || view !== "guide" || S.done) return;
+  if (speaking || aiCtl || document.hidden || !camLive()) return;
+  if (now - lastAiAt < cfg.autoSec * 1000) return;
+  if (now - lastSpeechEnd < 6000 || now - lastHeardAt < 3000) return;
+  const frame = grabFrame();
+  if (!frame) return;
+  if (lastSig && sigDiff(frame.sig, lastSig) < 5) {       // 手元に動きがなければ送らず、5秒後に見直す
+    lastAiAt = now - cfg.autoSec * 1000 + 5000;
+    return;
+  }
+  askAI({ frame, auto: true });
+}
+
+/* ================= 設定画面 ================= */
+function openSettings() {
+  $("setKey").value = cfg.apiKey;
+  $("setAuto").value = String(cfg.autoSec);
+  $("setVoice").value = cfg.voiceOn ? "on" : "off";
+  $("setRate").value = String(cfg.rate);
+  $("setListen").value = cfg.listenOn ? "on" : "off";
+  $("setModelCheck").value = cfg.modelCheck;
+  $("setModelId").value = cfg.modelIdentify;
+  $("setTestOut").textContent = "";
+  $("settings").hidden = false;
+}
+function readSettings() {
+  cfg.apiKey = $("setKey").value.trim();
+  cfg.autoSec = Number($("setAuto").value) || 0;
+  cfg.voiceOn = $("setVoice").value === "on";
+  cfg.rate = Number($("setRate").value) || 1;
+  cfg.listenOn = $("setListen").value === "on";
+  cfg.modelCheck = $("setModelCheck").value.trim() || "claude-haiku-5-5";
+  cfg.modelIdentify = $("setModelId").value.trim() || "claude-sonnet-5-5";
+  autoPaused = false; autoFails = 0;
+  saveCfg();
+  if (!cfg.voiceOn) stopVoice();
+  if (!cfg.listenOn) stopRec(); else if (live) scheduleRec(200);
+}
+function closeSettings() {
+  readSettings();
+  $("settings").hidden = true;
+  if (S.guideId) renderGuide(); else renderLive();
+}
+
+/* ================= イベント ================= */
+$("liveBtn").addEventListener("click", async () => {
+  primeVoice();
+  keepAwake();
+  live = true;
+  micBlocked = false;
+  camErr = "";
+  setupRec();
+  if (cfg.listenOn && rec && !recActive) { try { rec.start(); } catch (e) {} }   // 許可の確認はタップの中で出す
+  renderLive();
+  if (!window.isSecureContext) {
+    camErr = "カメラとマイクは https のページでしか使えません。";
+  } else {
+    try { await startCamera(); }
+    catch (e) {
+      camErr = (e && (e.name === "NotAllowedError" || e.name === "SecurityError"))
+        ? "カメラが許可されていません。ブラウザの設定でこのページのカメラを許可してください。"
+        : "カメラを起動できませんでした。ほかのアプリがカメラを使っていないか確認してください。";
+    }
+  }
+  renderLive();
+  if (camLive()) speak(view === "home" ? "準備ができました。魚を映して、見分けて、と話しかけてください。" : "準備ができました。");
+});
+video.addEventListener("loadedmetadata", renderLive);
+video.addEventListener("playing", renderLive);
+
+$("camAction").addEventListener("click", () => {
+  tap();
+  if (view === "home") identify();
+  else {
+    const q = $("askInput").value.trim();
+    $("askInput").value = "";
+    askAI({ frame: grabFrame(), question: q });
+  }
+});
+$("status").addEventListener("click", () => {
+  if (speaking) stopVoice();
+  tap();
+});
+
+$("settingsBtn").addEventListener("click", openSettings);
+$("keyCardBtn").addEventListener("click", openSettings);
+$("settingsClose").addEventListener("click", () => { tap(); closeSettings(); });
+$("setKeyClear").addEventListener("click", () => {
+  $("setKey").value = "";
+  readSettings();
+  $("setTestOut").textContent = "キーを消しました。";
+});
+$("setTest").addEventListener("click", async () => {
+  readSettings();
+  const out = $("setTestOut");
+  if (!cfg.apiKey) { out.textContent = "APIキーを入れてください。"; return; }
+  out.textContent = "接続を試しています…";
+  try {
+    const t = await callClaude({ prompt: "「接続できました」とだけ答えてください。", model: cfg.modelCheck, maxTokens: 64 });
+    out.textContent = "保存しました。AIの返事: " + t.trim().slice(0, 60);
+  } catch (e) {
+    out.textContent = "保存しましたが、接続できませんでした。" + errText(e);
+  }
+});
+
+$("idRetryBtn").addEventListener("click", () => { tap(); identify(); });
+$("idStopBtn").addEventListener("click", () => { cancelAI(); stopVoice(); $("idBox").hidden = true; });
+$("idStartBtn").addEventListener("click", () => { tap(); if (pendingId) startGuide(pendingId); });
+
+$("prevBtn").addEventListener("click", () => {
+  tap();
+  if (S.done) goTo(S.steps.length - 1, true); else goTo(S.i - 1, true);
+});
+$("againBtn").addEventListener("click", () => { tap(); speak(stepSpeech()); });
+$("nextBtn").addEventListener("click", () => {
+  tap();
+  if (S.i >= S.steps.length - 1) finish(); else goTo(S.i + 1, true);
+});
+$("changeBtn").addEventListener("click", () => { tap(); goHome(); });
+$("doneHomeBtn").addEventListener("click", () => { tap(); goHome(); });
+
+$("aiJumpBtn").addEventListener("click", (ev) => {
+  tap();
+  const k = Number(ev.currentTarget.dataset.step);
+  ev.currentTarget.hidden = true;
+  if (Number.isInteger(k)) goTo(k, true);
+});
+$("aiStopBtn").addEventListener("click", () => { cancelAI(); stopVoice(); $("aiBox").hidden = true; });
+
+$("chips").addEventListener("click", (ev) => {
+  const b = ev.target.closest(".chip");
+  if (!b) return;
+  tap();
+  sendQuestion(b.textContent);
+});
+$("askForm").addEventListener("submit", (ev) => { ev.preventDefault(); tap(); sendQuestion(); });
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { stopRec(); stopVoice(); return; }
+  if (!live) return;
+  keepAwake();
+  renderLive();               // カメラが止められていたら「入れ直す」ボタンが出る
+  scheduleRec(300);
+});
+
+/* ================= 起動 ================= */
+loadCfg();
+loadState();
+renderHomeList();
+if (S.guideId) { show("guide"); renderGuide(); } else show("home");
+setInterval(tick, 500);
+</script>
+</body>
+</html>
