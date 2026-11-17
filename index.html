@@ -166,6 +166,8 @@ button:disabled { opacity: .45; cursor: default; }
 
 .done-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.7rem; }
 .done ul { margin: 0; padding-left: 1.2em; }
+.raw summary { font-size: .85rem; color: var(--muted); min-height: 40px; display: flex; align-items: center; cursor: pointer; }
+.raw pre { margin: 0; padding: 10px; background: var(--bg); border-radius: 10px; font-size: .78rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow-y: auto; }
 
 /* ---------- 下の操作帯 ---------- */
 .dock { border-top: 1px solid var(--line); background: var(--bg); padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -267,6 +269,7 @@ details.adv .field { margin-top: 10px; }
         </div>
       </div>
       <ul class="notes" id="idNotes" hidden></ul>
+      <details class="raw" id="idRaw" hidden><summary>AIの返事をそのまま見る</summary><pre id="idRawText"></pre></details>
       <div class="row" id="idActions" hidden>
         <button type="button" class="btn btn-accent" id="idStartBtn">この手順で始める</button>
         <button type="button" class="btn" id="idRetryBtn">もう一度見分ける</button>
@@ -1178,6 +1181,7 @@ async function identify() {
   $("idName").textContent = "見分けています";
   $("idWhy").textContent = "10秒から30秒ほどかかります。";
   $("idNotes").hidden = true;
+  setRaw("");
   $("idActions").hidden = true;
   $("idStopBtn").hidden = false;
   box.scrollIntoView({ block: "nearest" });
@@ -1191,17 +1195,40 @@ async function identify() {
   try {
     const text = await callAI({ prompt: identifyPrompt(), image: frame.b64, model: curModel("id"), maxTokens: 3000, json: true, signal: ctl.signal });
     if (aiCtl !== ctl) return;
-    showIdResult(parseLoose(text) || {});
+    setRaw(text);
+    let r = null;
+    try { r = parseLoose(text); } catch (e) { r = null; }
+    showIdResult(normalizeId(r));
   } catch (e) {
     if (isAbort(e)) { if (aiCtl === ctl || aiCtl === null) box.hidden = true; return; }
     $("idName").textContent = "見分けられませんでした";
     $("idWhy").textContent = errText(e) + " 下から捌き方を選んで始めることもできます。";
+    setRaw("エラー: " + JSON.stringify({ status: e && e.status, code: e && e.code, message: e && e.message }));
     $("idActions").hidden = false;
     $("idStartBtn").hidden = true;
     speak("見分けられませんでした。画面を確認してください。");
   } finally {
     if (aiCtl === ctl) { aiCtl = null; $("idStopBtn").hidden = true; renderStatus(); }
   }
+}
+function setRaw(s) {
+  $("idRawText").textContent = String(s || "").slice(0, 4000);
+  $("idRaw").hidden = !s;
+}
+/* AIの返事の形の揺れを吸収する(配列で返る、true が文字列、found が抜ける など) */
+function normalizeId(r) {
+  if (Array.isArray(r)) r = r.find((x) => x && typeof x === "object") || {};
+  if (!r || typeof r !== "object") return {};
+  for (const k of ["result", "fish", "data", "answer"]) {
+    if (r[k] && typeof r[k] === "object" && !Array.isArray(r[k]) && !r.name) { r = Object.assign({}, r, r[k]); }
+  }
+  const o = Object.assign({}, r);
+  if (!o.name) o.name = o.fish_name || o.fishName || o.species || o["魚"] || "";
+  if (typeof o.found === "string") o.found = !/^(false|no|いいえ)$/i.test(o.found.trim());
+  if (o.found === undefined) o.found = !!o.name;
+  if (typeof o.guide === "string") o.guide = o.guide.trim().toLowerCase();
+  if (typeof o.sure === "string") o.sure = o.sure.trim().toLowerCase();
+  return o;
 }
 function showIdResult(r) {
   const name = String(r.name || "").slice(0, 30);
