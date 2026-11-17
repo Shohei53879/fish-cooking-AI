@@ -254,7 +254,7 @@ details.adv .field { margin-top: 10px; }
     <p class="lead">魚を映して「見分けて」と話しかけると、種類を見分けて捌き方を声で案内します。作業中は手元を定期的に見て、気づいたことを伝えます。</p>
 
     <section class="card" id="keyCard" hidden>
-      <p class="note">AIに映像を見せるには、AnthropicのAPIキーが必要です。キーがなくても、手順の読み上げと声の操作は使えます。</p>
+      <p class="note">AIに映像を見せるには、GeminiかClaudeのAPIキーが必要です。Geminiは無料枠で使えます。キーがなくても、手順の読み上げと声の操作は使えます。</p>
       <button type="button" class="btn btn-accent" id="keyCardBtn">APIキーを設定する</button>
     </section>
 
@@ -363,9 +363,28 @@ details.adv .field { margin-top: 10px; }
     </div>
 
     <div class="field">
+      <label for="setProvider">使うAI</label>
+      <select id="setProvider">
+        <option value="gemini">Gemini(Google・無料枠あり)</option>
+        <option value="claude">Claude(Anthropic・使った分だけ有料)</option>
+      </select>
+    </div>
+
+    <div class="field" id="gKeyField">
+      <label for="setGKey">GeminiのAPIキー</label>
+      <input type="password" id="setGKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AIza…">
+      <p class="note">キーは <a href="https://aistudio.google.com/" target="_blank" rel="noopener">Google AI Studio</a> で作れます。</p>
+      <p class="callout warn"><b>無料枠について</b><span>送った映像と文章はGoogleの製品改善に使われ、人が読むこともあります。顔や家の中が映らないようにしてください。1日に使える回数にも上限があります。</span></p>
+    </div>
+
+    <div class="field" id="cKeyField">
       <label for="setKey">AnthropicのAPIキー</label>
       <input type="password" id="setKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">
-      <p class="note">キーはこの端末のブラウザの中だけに保存し、Anthropic以外には送りません。キーは <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">Claude Console</a> で作れます。利用した分だけ料金がかかります。</p>
+      <p class="note">キーは <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">Claude Console</a> で作れます。利用した分だけ料金がかかります。</p>
+    </div>
+
+    <div class="field">
+      <p class="note">キーはこの端末のブラウザの中だけに保存し、選んだAIの会社以外には送りません。</p>
       <div class="row">
         <button type="button" class="btn btn-accent" id="setTest">保存して試す</button>
         <button type="button" class="btn" id="setKeyClear">キーを消す</button>
@@ -381,7 +400,7 @@ details.adv .field { margin-top: 10px; }
         <option value="30">30秒ごと</option>
         <option value="60">60秒ごと</option>
       </select>
-      <p class="note">手元に動きがあったときだけAIに静止画を送ります。間隔を短くすると、その分APIの利用料が増えます。</p>
+      <p class="note">手元に動きがあったときだけAIに静止画を送ります。間隔を短くすると、Claudeでは利用料が、Geminiの無料枠では使う回数が増えます。</p>
     </div>
 
     <div class="field">
@@ -409,13 +428,25 @@ details.adv .field { margin-top: 10px; }
 
     <details class="adv">
       <summary>くわしい設定</summary>
-      <div class="field">
-        <label for="setModelCheck">助言に使うモデル</label>
-        <input type="text" id="setModelCheck" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div id="gModelFields">
+        <div class="field">
+          <label for="setGModelCheck">助言に使うGeminiのモデル</label>
+          <input type="text" id="setGModelCheck" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="setGModelId">魚の見分けに使うGeminiのモデル</label>
+          <input type="text" id="setGModelId" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
       </div>
-      <div class="field">
-        <label for="setModelId">魚の見分けに使うモデル</label>
-        <input type="text" id="setModelId" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div id="cModelFields">
+        <div class="field">
+          <label for="setModelCheck">助言に使うClaudeのモデル</label>
+          <input type="text" id="setModelCheck" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="setModelId">魚の見分けに使うClaudeのモデル</label>
+          <input type="text" id="setModelId" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
       </div>
     </details>
   </div>
@@ -535,9 +566,17 @@ const GUIDE_IDS = Object.keys(GUIDES);
 const $ = (id) => document.getElementById(id);
 const CFG_KEY = "sabaki-web.cfg.v1", STATE_KEY = "sabaki-web.state.v1";
 const cfg = {
-  apiKey: "", autoSec: 30, voiceOn: true, rate: 1, listenOn: true,
+  provider: "gemini", geminiKey: "", apiKey: "",
+  autoSec: 60, voiceOn: true, rate: 1, listenOn: true,
+  gModelCheck: "gemini-3.5-flash-lite", gModelIdentify: "gemini-3.8-flash",
   modelCheck: "claude-haiku-5-5", modelIdentify: "claude-sonnet-5-5"
 };
+const isGemini = () => cfg.provider === "gemini";
+function curKey() { return isGemini() ? cfg.geminiKey : cfg.apiKey; }
+function curModel(kind) {
+  if (isGemini()) return kind === "id" ? cfg.gModelIdentify : cfg.gModelCheck;
+  return kind === "id" ? cfg.modelIdentify : cfg.modelCheck;
+}
 function loadCfg() {
   try {
     const d = JSON.parse(localStorage.getItem(CFG_KEY) || "null");
@@ -849,17 +888,17 @@ function renderLive() {
   $("camMsg").textContent = camErr || "映像は保存しません。AIに見せるときだけ、静止画を1枚送ります。";
 
   const act = $("camAction");
-  act.hidden = !(on && cfg.apiKey) || (view === "guide" && S.done);
+  act.hidden = !(on && curKey()) || (view === "guide" && S.done);
   act.textContent = view === "home" ? "この魚を見分ける" : "見てもらう";
 
   const chip = $("autoChip");
   $("camChips").hidden = !(on && view === "guide" && !S.done);
-  chip.textContent = !cfg.apiKey ? "AI 未設定"
+  chip.textContent = !curKey() ? "AI 未設定"
     : autoPaused ? "自動チェック 停止中"
     : cfg.autoSec ? "自動チェック " + cfg.autoSec + "秒ごと"
     : "自動チェック 切";
 
-  $("keyCard").hidden = !!cfg.apiKey;
+  $("keyCard").hidden = !!curKey();
   renderStatus();
 }
 
@@ -932,7 +971,7 @@ function renderGuide() {
   $("againBtn").disabled = S.done;
   $("nextBtn").disabled = S.done;
   $("nextBtn").textContent = (!S.done && S.i === S.steps.length - 1) ? "完了" : "次へ";
-  $("askBox").hidden = !cfg.apiKey || S.done;
+  $("askBox").hidden = !curKey() || S.done;
   renderLive();
 }
 function stepSpeech() {
@@ -1012,7 +1051,7 @@ async function callClaude(o) {
   const fail = async (res) => {
     let j = null;
     try { j = await res.json(); } catch (e) {}
-    return { status: res.status, message: (j && j.error && j.error.message) || "" };
+    return { status: res.status, message: (j && j.error && j.error.message) || "", provider: "claude" };
   };
   let res = await post(apiVersion);
   if (!res.ok) {
@@ -1027,6 +1066,53 @@ async function callClaude(o) {
   const j = await res.json();
   return (j.content || []).filter((b) => b && b.type === "text").map((b) => b.text).join("");
 }
+/* ---- Gemini ---- */
+let geminiThinkingLow = true;   // 返事を速くする設定。モデルが受け付けなければ外す
+async function callGemini(o) {
+  const parts = [{ text: o.prompt }];
+  if (o.image) parts.push({ inlineData: { mimeType: "image/jpeg", data: o.image } });
+  const make = (think) => {
+    const gc = { maxOutputTokens: Math.min(8192, Math.max(1024, o.maxTokens * 4)) };   // 考える分のトークンも含まれるため多めに
+    if (o.json) gc.responseMimeType = "application/json";
+    if (think) gc.thinkingConfig = { thinkingLevel: "low" };
+    return JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: gc });
+  };
+  const post = (body) => fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(o.model) + ":generateContent",
+    { method: "POST", signal: o.signal, headers: { "content-type": "application/json", "x-goog-api-key": cfg.geminiKey }, body }
+  );
+  const fail = async (res) => {
+    let j = null;
+    try { j = await res.json(); } catch (e) {}
+    const er = (j && j.error) || {};
+    return { status: res.status, message: er.message || "", gstatus: er.status || "", provider: "gemini" };
+  };
+  let res = await post(make(geminiThinkingLow));
+  if (!res.ok) {
+    let err = await fail(res);
+    if (err.status === 400 && geminiThinkingLow && /think/i.test(err.message)) {
+      geminiThinkingLow = false;
+      res = await post(make(false));
+      err = res.ok ? null : await fail(res);
+    }
+    if (err) throw err;
+  }
+  const j = await res.json();
+  if (j.promptFeedback && j.promptFeedback.blockReason) throw { code: "blocked", provider: "gemini" };
+  const c = (j.candidates || [])[0];
+  const text = (c && c.content && Array.isArray(c.content.parts))
+    ? c.content.parts.filter((p) => p && typeof p.text === "string" && !p.thought).map((p) => p.text).join("")
+    : "";
+  if (!text.trim()) {
+    const fr = (c && c.finishReason) || "";
+    throw { code: /SAFETY|PROHIBITED|BLOCK|RECITATION/.test(fr) ? "blocked" : "empty", provider: "gemini" };
+  }
+  return text;
+}
+function callAI(o) {
+  return isGemini() ? callGemini(o) : callClaude(o);
+}
+
 function parseLoose(text) {
   try { return JSON.parse(text); } catch (e) {}
   const a = text.search(/[{[]/);
@@ -1037,7 +1123,16 @@ function parseLoose(text) {
 function isAbort(e) { return !!(e && e.name === "AbortError"); }
 function errText(e) {
   const st = e && e.status, msg = (e && e.message) || "";
-  if (e && e.code === "invalid_json") return "答えをうまく受け取れませんでした。もう一度お試しください。";
+  if (e && (e.code === "invalid_json" || e.code === "empty")) return "答えをうまく受け取れませんでした。もう一度お試しください。";
+  if (e && e.code === "blocked") return "安全のための仕組みで答えが止められました。映し方や聞き方を変えてください。";
+  if (e && e.provider === "gemini") {
+    if (/API key|API_KEY/i.test(msg) || st === 401) return "GeminiのAPIキーが正しくありません。設定で入れ直してください。";
+    if (st === 429) return "Geminiの無料枠の上限に達しました。1分ほど待つか、1日の上限なら翌日(日本時間の夕方に戻ります)にお試しください。";
+    if (st === 403) return "このキーではGeminiを使えません。Google AI Studioでキーを確認してください。";
+    if (st === 404) return "Geminiのモデル名が見つかりません。設定の「くわしい設定」を確認してください。";
+    if (st >= 500) return "Gemini側が混み合っています。少し待ってからお試しください。";
+    if (st === 400) return "リクエストが受け付けられませんでした。" + (msg ? "(" + msg.slice(0, 90) + ")" : "");
+  }
   if (st === 401) return "APIキーが正しくありません。設定で入れ直してください。";
   if (st === 403) return "このAPIキーでは利用できません。Claude Consoleで権限を確認してください。";
   if (st === 404) return "モデル名が見つかりません。設定の「くわしい設定」を確認してください。";
@@ -1074,7 +1169,7 @@ function identifyPrompt() {
   ].join("\n");
 }
 async function identify() {
-  if (!cfg.apiKey) { speak("魚の見分けには、APIキーの設定が必要です。"); return; }
+  if (!curKey()) { speak("魚の見分けには、APIキーの設定が必要です。"); return; }
   const frame = grabFrame(1280);
   if (!frame) { speak("カメラが入っていません。画面のボタンでカメラを入れてください。"); return; }
   const box = $("idBox");
@@ -1094,7 +1189,7 @@ async function identify() {
   speak("魚を見分けています。少し待ってください。");
   renderStatus();
   try {
-    const text = await callClaude({ prompt: identifyPrompt(), image: frame.b64, model: cfg.modelIdentify, maxTokens: 3000, signal: ctl.signal });
+    const text = await callAI({ prompt: identifyPrompt(), image: frame.b64, model: curModel("id"), maxTokens: 3000, json: true, signal: ctl.signal });
     if (aiCtl !== ctl) return;
     showIdResult(parseLoose(text) || {});
   } catch (e) {
@@ -1201,7 +1296,7 @@ function showAI(text, frame) {
 }
 async function askAI(o) {
   const auto = !!o.auto;
-  if (!cfg.apiKey) {
+  if (!curKey()) {
     if (!auto) { showAI("AIの助言にはAPIキーが必要です。右上の「設定」から入れてください。"); speak("AIの助言には、設定が必要です。"); }
     return;
   }
@@ -1221,10 +1316,10 @@ async function askAI(o) {
   }
   renderStatus();
   try {
-    const out = await callClaude({
+    const out = await callAI({
       prompt: checkPrompt(o.question, !!o.frame, auto),
       image: o.frame ? o.frame.b64 : null,
-      model: cfg.modelCheck, maxTokens: 1024, signal: ctl.signal
+      model: curModel("check"), maxTokens: 1024, json: true, signal: ctl.signal
     });
     if (aiCtl !== ctl) return;
     const r = parseLoose(out) || {};
@@ -1250,7 +1345,7 @@ async function askAI(o) {
     if (isAbort(e)) { if (!auto && (aiCtl === ctl || aiCtl === null)) $("aiBox").hidden = true; return; }
     if (auto) {
       autoFails++;
-      const fatal = e && (e.status === 400 || e.status === 401 || e.status === 403 || e.status === 404);
+      const fatal = e && (e.status === 400 || e.status === 401 || e.status === 403 || e.status === 404 || e.status === 429);
       if (fatal || autoFails >= 3) {
         autoPaused = true;
         showAI(errText(e) + " 自動チェックを止めました。「見て」と言うと、もう一度試します。");
@@ -1284,7 +1379,7 @@ function tick() {
     if (!recActive && !recTimer) startRec();
     else if (recActive && now - lastRecEvent > 45000) { try { rec.abort(); } catch (e) {} }
   }
-  if (!cfg.autoSec || autoPaused || !cfg.apiKey || view !== "guide" || S.done) return;
+  if (!cfg.autoSec || autoPaused || !curKey() || view !== "guide" || S.done) return;
   if (speaking || aiCtl || document.hidden || !camLive()) return;
   if (now - lastAiAt < cfg.autoSec * 1000) return;
   if (now - lastSpeechEnd < 6000 || now - lastHeardAt < 3000) return;
@@ -1298,7 +1393,19 @@ function tick() {
 }
 
 /* ================= 設定画面 ================= */
+function renderProviderFields() {
+  const g = $("setProvider").value === "gemini";
+  $("gKeyField").hidden = !g;
+  $("gModelFields").hidden = !g;
+  $("cKeyField").hidden = g;
+  $("cModelFields").hidden = g;
+}
 function openSettings() {
+  $("setProvider").value = cfg.provider;
+  $("setGKey").value = cfg.geminiKey;
+  $("setGModelCheck").value = cfg.gModelCheck;
+  $("setGModelId").value = cfg.gModelIdentify;
+  renderProviderFields();
   $("setKey").value = cfg.apiKey;
   $("setAuto").value = String(cfg.autoSec);
   $("setVoice").value = cfg.voiceOn ? "on" : "off";
@@ -1310,6 +1417,10 @@ function openSettings() {
   $("settings").hidden = false;
 }
 function readSettings() {
+  cfg.provider = $("setProvider").value === "claude" ? "claude" : "gemini";
+  cfg.geminiKey = $("setGKey").value.trim();
+  cfg.gModelCheck = $("setGModelCheck").value.trim() || "gemini-3.5-flash-lite";
+  cfg.gModelIdentify = $("setGModelId").value.trim() || "gemini-3.8-flash";
   cfg.apiKey = $("setKey").value.trim();
   cfg.autoSec = Number($("setAuto").value) || 0;
   cfg.voiceOn = $("setVoice").value === "on";
@@ -1371,18 +1482,19 @@ $("status").addEventListener("click", () => {
 $("settingsBtn").addEventListener("click", openSettings);
 $("keyCardBtn").addEventListener("click", openSettings);
 $("settingsClose").addEventListener("click", () => { tap(); closeSettings(); });
+$("setProvider").addEventListener("change", () => { renderProviderFields(); $("setTestOut").textContent = ""; });
 $("setKeyClear").addEventListener("click", () => {
-  $("setKey").value = "";
+  if ($("setProvider").value === "gemini") $("setGKey").value = ""; else $("setKey").value = "";
   readSettings();
   $("setTestOut").textContent = "キーを消しました。";
 });
 $("setTest").addEventListener("click", async () => {
   readSettings();
   const out = $("setTestOut");
-  if (!cfg.apiKey) { out.textContent = "APIキーを入れてください。"; return; }
+  if (!curKey()) { out.textContent = "APIキーを入れてください。"; return; }
   out.textContent = "接続を試しています…";
   try {
-    const t = await callClaude({ prompt: "「接続できました」とだけ答えてください。", model: cfg.modelCheck, maxTokens: 64 });
+    const t = await callAI({ prompt: "「接続できました」とだけ答えてください。", model: curModel("check"), maxTokens: 64 });
     out.textContent = "保存しました。AIの返事: " + t.trim().slice(0, 60);
   } catch (e) {
     out.textContent = "保存しましたが、接続できませんでした。" + errText(e);
