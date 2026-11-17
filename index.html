@@ -1113,25 +1113,35 @@ async function callGeminiOnce(o) {
   return text;
 }
 /* 混雑(503)や上限(429)のときは、無料枠の別モデルに順に切り替える */
-const GEMINI_BACKUPS = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const GEMINI_BACKUPS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
 let lastModelUsed = "";
 async function callGemini(o) {
   const chain = [o.model, ...GEMINI_BACKUPS].filter((m, k, a) => m && a.indexOf(m) === k);
-  let lastErr = null;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tries = [];
+  let best = null;                      // 混雑・上限のエラーを、提供終了(404)より優先して伝える
   for (let k = 0; k < chain.length; k++) {
-    try {
-      const text = await callGeminiOnce(Object.assign({}, o, { model: chain[k] }));
-      lastModelUsed = chain[k];
-      return text;
-    } catch (e) {
-      if (isAbort(e)) throw e;
-      lastErr = e;
-      const busy = e && (e.status === 503 || e.status === 500 || e.status === 429 || e.status === 404);
-      if (!busy) throw e;
-      if (k < chain.length - 1) await new Promise((r) => setTimeout(r, 600));
+    for (let attempt = 0; attempt < (k === 0 ? 2 : 1); attempt++) {   // 最初のモデルだけ、混雑なら2秒待ってもう一度
+      try {
+        const text = await callGeminiOnce(Object.assign({}, o, { model: chain[k] }));
+        lastModelUsed = chain[k];
+        return text;
+      } catch (e) {
+        if (isAbort(e)) throw e;
+        tries.push(chain[k] + ": " + (e && (e.status || e.code)));
+        const busy = e && (e.status === 503 || e.status === 500 || e.status === 429);
+        const gone = e && e.status === 404;
+        if (!busy && !gone) throw e;
+        if (busy && (!best || best.status === 404)) best = e;
+        if (!best) best = e;
+        if (gone) break;
+        if (k === 0 && attempt === 0) { await wait(2000); continue; }
+        await wait(600);
+      }
     }
   }
-  throw lastErr;
+  best.tries = tries;
+  throw best;
 }
 function callAI(o) {
   lastModelUsed = isGemini() ? "" : o.model;
@@ -1225,7 +1235,8 @@ async function identify() {
     if (isAbort(e)) { if (aiCtl === ctl || aiCtl === null) box.hidden = true; return; }
     $("idName").textContent = "見分けられませんでした";
     $("idWhy").textContent = errText(e) + " 下から捌き方を選んで始めることもできます。";
-    setRaw("エラー: " + JSON.stringify({ status: e && e.status, code: e && e.code, message: e && e.message }));
+    setRaw("エラー: " + JSON.stringify({ status: e && e.status, code: e && e.code, message: e && e.message })
+      + (e && e.tries ? "\n試したモデル: " + e.tries.join(" / ") : ""));
     $("idActions").hidden = false;
     $("idStartBtn").hidden = true;
     speak("見分けられませんでした。画面を確認してください。");
