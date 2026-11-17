@@ -1071,7 +1071,7 @@ async function callClaude(o) {
 }
 /* ---- Gemini ---- */
 let geminiThinkingLow = true;   // 返事を速くする設定。モデルが受け付けなければ外す
-async function callGemini(o) {
+async function callGeminiOnce(o) {
   const parts = [{ text: o.prompt }];
   if (o.image) parts.push({ inlineData: { mimeType: "image/jpeg", data: o.image } });
   const make = (think) => {
@@ -1112,7 +1112,29 @@ async function callGemini(o) {
   }
   return text;
 }
+/* 混雑(503)や上限(429)のときは、無料枠の別モデルに順に切り替える */
+const GEMINI_BACKUPS = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+let lastModelUsed = "";
+async function callGemini(o) {
+  const chain = [o.model, ...GEMINI_BACKUPS].filter((m, k, a) => m && a.indexOf(m) === k);
+  let lastErr = null;
+  for (let k = 0; k < chain.length; k++) {
+    try {
+      const text = await callGeminiOnce(Object.assign({}, o, { model: chain[k] }));
+      lastModelUsed = chain[k];
+      return text;
+    } catch (e) {
+      if (isAbort(e)) throw e;
+      lastErr = e;
+      const busy = e && (e.status === 503 || e.status === 500 || e.status === 429 || e.status === 404);
+      if (!busy) throw e;
+      if (k < chain.length - 1) await new Promise((r) => setTimeout(r, 600));
+    }
+  }
+  throw lastErr;
+}
 function callAI(o) {
+  lastModelUsed = isGemini() ? "" : o.model;
   return isGemini() ? callGemini(o) : callClaude(o);
 }
 
@@ -1133,7 +1155,7 @@ function errText(e) {
     if (st === 429) return "Geminiの無料枠の上限に達しました。1分ほど待つか、1日の上限なら翌日(日本時間の夕方に戻ります)にお試しください。";
     if (st === 403) return "このキーではGeminiを使えません。Google AI Studioでキーを確認してください。";
     if (st === 404) return "Geminiのモデル名が見つかりません。設定の「くわしい設定」を確認してください。";
-    if (st >= 500) return "Gemini側が混み合っています。少し待ってからお試しください。";
+    if (st >= 500) return "Geminiが混み合っていて、予備のモデルもつながりませんでした。少し待ってからお試しください。";
     if (st === 400) return "リクエストが受け付けられませんでした。" + (msg ? "(" + msg.slice(0, 90) + ")" : "");
   }
   if (st === 401) return "APIキーが正しくありません。設定で入れ直してください。";
@@ -1195,7 +1217,7 @@ async function identify() {
   try {
     const text = await callAI({ prompt: identifyPrompt(), image: frame.b64, model: curModel("id"), maxTokens: 3000, json: true, signal: ctl.signal });
     if (aiCtl !== ctl) return;
-    setRaw(text);
+    setRaw((lastModelUsed ? "モデル: " + lastModelUsed + "\n" : "") + text);
     let r = null;
     try { r = parseLoose(text); } catch (e) { r = null; }
     showIdResult(normalizeId(r));
